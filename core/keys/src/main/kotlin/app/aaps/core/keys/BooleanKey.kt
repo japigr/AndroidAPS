@@ -129,4 +129,7 @@ enum class BooleanKey(
     ExportCsvLocalEnabled("export_csv_local_enabled", defaultValue = true),
     ExportCsvCloudEnabled("export_csv_cloud_enabled", defaultValue = false),
 
+    // fork japigr/AndroidAPS: extra data for remote tuning in device status
+    LoopSendTuningData("loop_send_tuning_data", defaultValue = true),
+
 }

@@ -84,6 +84,7 @@ import app.aaps.core.objects.extensions.json
 import app.aaps.core.objects.extensions.plannedRemainingMinutes
 import app.aaps.core.ui.toast.ToastUtils
 import app.aaps.core.validators.preferences.AdaptiveIntPreference
+import app.aaps.core.validators.preferences.AdaptiveSwitchPreference
 import app.aaps.plugins.aps.R
 import app.aaps.plugins.aps.loop.events.EventLoopSetLastRunGui
 import app.aaps.plugins.aps.loop.extensions.json
@@ -996,6 +997,14 @@ class LoopPlugin @Inject constructor(
                 apsResult = lastRun.request?.json()?.also {
                     it.put("timestamp", dateUtil.toISOString(lastRun.lastAPSRun))
                     it.put("isfMgdlForCarbs", profile.getIsfMgdlForCarbs(dateUtil.now(), "LoopPlugin", config, processedDeviceStatusData))
+                    if (preferences.get(BooleanKey.LoopSendTuningData))
+                        try {
+                            val runningMode = persistenceLayer.getRunningModeActiveAt(dateUtil.now())
+                            TuningData.build(lastRun, runningMode, activePlugin.activePump, preferences, dateUtil.now())?.let { tuning -> it.put(TuningData.KEY, tuning) }
+                        } catch (e: Throwable) {
+                            // never let the export break device status
+                            aapsLogger.error(LTag.NSCLIENT, "Building tuning data failed", e)
+                        }
                 }
                 iob = lastRun.request?.iob?.json(dateUtil)?.also {
                     it.put("time", dateUtil.toISOString(lastRun.lastAPSRun))
@@ -1046,6 +1055,7 @@ class LoopPlugin @Inject constructor(
             title = rh.gs(app.aaps.core.ui.R.string.loop)
             initialExpandedChildrenCount = 0
             addPreference(AdaptiveIntPreference(ctx = context, intKey = IntKey.LoopOpenModeMinChange, dialogMessage = R.string.loop_open_mode_min_change_summary, title = R.string.loop_open_mode_min_change))
+            addPreference(AdaptiveSwitchPreference(ctx = context, booleanKey = BooleanKey.LoopSendTuningData, summary = R.string.loop_send_tuning_data_summary, title = R.string.loop_send_tuning_data))
         }
     }
 

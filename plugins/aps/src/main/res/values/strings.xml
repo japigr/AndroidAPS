@@ -128,6 +128,8 @@
     <string name="loop_smb_set_by_pump_label">SMB set by pump</string>
     <string name="loop_open_mode_min_change">Minimal request change [%]</string>
     <string name="loop_open_mode_min_change_summary" formatted="false">Open Loop will popup new change request only if change is bigger than this value in %. Default value is 20%</string>
+    <string name="loop_send_tuning_data">Send tuning data to Nightscout</string>
+    <string name="loop_send_tuning_data_summary">Adds algorithm inputs, settings, constraints and debug output to device status (openaps.suggested.aapsTuning) for remote analysis of loop settings. Export only.</string>
     <string name="fallback_smb_no_tdd">Fallback to SMB. Not enough TDD data.</string>
     <string name="fallback_to_isf_no_tdd">Fallback to profile sensitivity. Not enough data. Reason: %1$s</string>
 

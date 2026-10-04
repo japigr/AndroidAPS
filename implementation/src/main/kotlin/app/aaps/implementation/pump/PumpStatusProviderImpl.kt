@@ -105,6 +105,8 @@ class PumpStatusProviderImpl @Inject constructor(
 
         // grab more values from pump if provided
         pump.updateExtendedJsonStatus(extended)
+        // fork japigr/AndroidAPS: battery voltage reported by the pump driver also in the standard field (Nightscout pump plugin alerts)
+        extended.optDouble("BatteryVoltage").takeIf { it.isFinite() }?.let { battery.put("voltage", it) }
         return pumpJson
             .put("battery", battery)
             .put("status", status)

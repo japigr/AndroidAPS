@@ -42,6 +42,7 @@ import app.aaps.core.interfaces.rx.events.EventAppExit
 import app.aaps.core.interfaces.rx.events.EventDismissNotification
 import app.aaps.core.interfaces.ui.UiInteraction
 import app.aaps.core.interfaces.utils.DateUtil
+import app.aaps.core.interfaces.utils.Round
 import app.aaps.core.interfaces.utils.fabric.FabricPrivacy
 import app.aaps.core.keys.BooleanKey
 import app.aaps.core.keys.IntKey
@@ -73,6 +74,7 @@ import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.math.abs
 import kotlin.math.min
+import org.json.JSONObject
 
 @Singleton
 class MedtrumPlugin @Inject constructor(
@@ -317,6 +319,19 @@ class MedtrumPlugin @Inject constructor(
     override val baseBasalRate: Double get() = medtrumPump.baseBasalRate
     override val reservoirLevel: Double get() = medtrumPump.reservoir
     override val batteryLevel: Int? = null // We cannot determine battery level (yet)
+
+    // fork japigr/AndroidAPS: patch details in device status (pump.extended), e.g. to see the battery voltage before a patch dies
+    override fun updateExtendedJsonStatus(extendedStatus: JSONObject) {
+        if (medtrumPump.batteryVoltage_B > 0) extendedStatus.put("BatteryVoltage", Round.roundTo(medtrumPump.batteryVoltage_B, 0.001))
+        if (medtrumPump.batteryVoltage_A > 0) extendedStatus.put("BatteryVoltageA", Round.roundTo(medtrumPump.batteryVoltage_A, 0.001))
+        if (medtrumPump.patchId != 0L) extendedStatus.put("PatchId", medtrumPump.patchId)
+        if (medtrumPump.patchStartTime != 0L) extendedStatus.put("PatchActivated", dateUtil.toISOString(medtrumPump.patchStartTime))
+        extendedStatus.put("PumpState", medtrumPump.pumpState.name)
+        extendedStatus.put("PumpModel", ModelType.fromValue(medtrumPump.deviceType).toString())
+        if (medtrumPump.swVersion.isNotEmpty()) extendedStatus.put("FirmwareVersion", medtrumPump.swVersion)
+        extendedStatus.put("PumpSerial", serialNumber())
+        if (medtrumPump.activeAlarms.isNotEmpty()) extendedStatus.put("ActiveAlarms", medtrumPump.activeAlarms.joinToString { it.name })
+    }
 
     @Synchronized
     override fun deliverTreatment(detailedBolusInfo: DetailedBolusInfo): PumpEnactResult {

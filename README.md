@@ -25,6 +25,10 @@ Every device status uploaded to Nightscout gets an extra object `openaps.suggest
 | `settings` | all APS, safety, absorption, autosens and insulin preferences, sent when they change and at least once per hour |
 | `automation` | the automation rules (title, enabled, triggers, actions), sent together with `settings`; location coordinates and Wi-Fi names are removed |
 
+Medtrum only: the pump part of every device status (`pump.extended`) also carries the patch details the driver already knows:
+`BatteryVoltage` (also as `pump.battery.voltage`, so Nightscout pump alerts can use it), `BatteryVoltageA`, `PatchId`,
+`PatchActivated`, `PumpState`, `PumpModel`, `FirmwareVersion`, `PumpSerial` and `ActiveAlarms`.
+
 Size: roughly 5–8 kB per device status (every 5 min); the hourly `settings`/`automation` part adds a few kB.
 
 Safety and scope:
@@ -32,7 +36,7 @@ Safety and scope:
 - No database change, so you can go back to an official build at any time.
 - The data sits inside `openaps.suggested`, which other apps (AAPSClient, xDrip+, Nightscout) already read and which ignore unknown keys.
 - Can be switched off: **Preferences → Loop → Send tuning data to Nightscout** (on by default in this fork).
-- Code: [`TuningData.kt`](plugins/aps/src/main/kotlin/app/aaps/plugins/aps/loop/TuningData.kt) plus a few lines in `LoopPlugin.kt`.
+- Code: [`TuningData.kt`](plugins/aps/src/main/kotlin/app/aaps/plugins/aps/loop/TuningData.kt) plus a few lines in `LoopPlugin.kt`, `MedtrumPlugin.kt` and `PumpStatusProviderImpl.kt`.
 
 ## Reading the data
 

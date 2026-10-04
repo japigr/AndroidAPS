@@ -23,8 +23,9 @@ Every device status uploaded to Nightscout gets an extra object `openaps.suggest
 | `runningMode` | closed / open / LGS / suspended, with reasons |
 | `debug` | the algorithm debug output (the same text as in the OpenAPS tab) |
 | `settings` | all APS, safety, absorption, autosens and insulin preferences, sent when they change and at least once per hour |
+| `automation` | the automation rules (title, enabled, triggers, actions), sent together with `settings`; location coordinates and Wi-Fi names are removed |
 
-Size: roughly 5–8 kB per device status (every 5 min).
+Size: roughly 5–8 kB per device status (every 5 min); the hourly `settings`/`automation` part adds a few kB.
 
 Safety and scope:
 - Export only. Nothing is read back and nothing influences dosing.

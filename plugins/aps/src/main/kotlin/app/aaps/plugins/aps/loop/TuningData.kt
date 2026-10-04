@@ -10,7 +10,9 @@ import app.aaps.core.keys.IntKey
 import app.aaps.core.keys.StringKey
 import app.aaps.core.keys.UnitDoubleKey
 import app.aaps.core.keys.interfaces.Preferences
+import app.aaps.core.keys.interfaces.StringNonPreferenceKey
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import kotlin.math.roundToLong
 import kotlin.reflect.full.declaredMemberProperties
@@ -21,8 +23,8 @@ import kotlin.reflect.full.declaredMemberProperties
  * Sent to Nightscout as `openaps.suggested.aapsTuning` in every device status:
  * everything the algorithm saw in its last run (settings, glucose, IOB curve, meal data,
  * autosens), the constraints that limited the result, what the pump actually did,
- * and the algorithm debug output. Full APS/safety preferences are added on change
- * and at least once per hour.
+ * and the algorithm debug output. Full APS/safety preferences and the automation rules
+ * (without location coordinates and Wi-Fi names) are added on change and at least once per hour.
  *
  * Export only. Nothing here is read back and nothing influences dosing.
  */
@@ -82,13 +84,65 @@ object TuningData {
         request.scriptDebug?.takeIf { it.isNotEmpty() }?.let { json.put("debug", JSONArray(it)) }
 
         val settings = settings(preferences)
-        val settingsHash = settings.toString().hashCode()
+        val automation = try {
+            automation(preferences)
+        } catch (_: Exception) {
+            null
+        }
+        val settingsHash = (settings.toString() + automation.toString()).hashCode()
         if (settingsHash != lastSettingsHash || now - lastSettingsSent > SETTINGS_EVERY) {
             json.put("settings", settings)
+            automation?.let { json.put("automation", it) }
             lastSettingsHash = settingsHash
             lastSettingsSent = now
         }
         return json
+    }
+
+    // Automation rules as stored by the automation plugin (that module is not a dependency here)
+    private val automationEventsKey = object : StringNonPreferenceKey {
+        override val key = "AUTOMATION_EVENTS"
+        override val defaultValue = ""
+        override val exportable = false
+    }
+
+    private fun automation(preferences: Preferences): JSONArray? {
+        val raw = preferences.get(automationEventsKey)
+        if (raw.isBlank()) return null
+        return expand(JSONArray(raw)) as? JSONArray
+    }
+
+    // Triggers and actions are stored as JSON strings nested in JSON; turn them into objects
+    private fun expand(value: Any?): Any? = when (value) {
+        is String     ->
+            if (value.startsWith("{") || value.startsWith("["))
+                try {
+                    expand(if (value.startsWith("{")) JSONObject(value) else JSONArray(value))
+                } catch (_: JSONException) {
+                    value
+                }
+            else value
+
+        is JSONObject -> JSONObject().also { out ->
+            value.keys().forEach { out.put(it, expand(value.get(it))) }
+            redact(out)
+        }
+
+        is JSONArray  -> JSONArray().also { out -> for (i in 0 until value.length()) out.put(expand(value.get(i))) }
+        else          -> value
+    }
+
+    // No home location or network names
+    private fun redact(o: JSONObject) {
+        val data = o.optJSONObject("data") ?: return
+        when (o.optString("type")) {
+            "TriggerLocation" -> {
+                data.remove("latitude")
+                data.remove("longitude")
+            }
+
+            "TriggerWifiSsid" -> if (data.has("ssid")) data.put("ssid", "***")
+        }
     }
 
     private fun settings(preferences: Preferences): JSONObject {

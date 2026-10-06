@@ -9,4 +9,5 @@ enum class MedtrumBooleanNonKey(
 ) : BooleanNonPreferenceKey {
 
     PatchPrimed("patch_primed_flag", defaultValue = false),
+    PrimeConnectionLost("prime_connection_lost", defaultValue = false),
 }

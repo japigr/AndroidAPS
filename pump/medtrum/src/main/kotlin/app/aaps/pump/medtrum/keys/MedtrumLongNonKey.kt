@@ -14,4 +14,6 @@ enum class MedtrumLongNonKey(
     PatchStartTime("patch_start_time", defaultValue = 0L),
     BolusStartTime("bolus_start_time", defaultValue = 0L),
     LastBolusTime("last_bolus_time", defaultValue = 0L),
+    PrimeStartTime("prime_start_time", defaultValue = 0L),
+    PrimeEndTime("prime_end_time", defaultValue = 0L),
 }

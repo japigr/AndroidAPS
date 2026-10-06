@@ -331,6 +331,11 @@ class MedtrumPlugin @Inject constructor(
         if (medtrumPump.swVersion.isNotEmpty()) extendedStatus.put("FirmwareVersion", medtrumPump.swVersion)
         extendedStatus.put("PumpSerial", serialNumber())
         if (medtrumPump.activeAlarms.isNotEmpty()) extendedStatus.put("ActiveAlarms", medtrumPump.activeAlarms.joinToString { it.name })
+        medtrumPump.primeSeconds?.let {
+            extendedStatus.put("PrimeStarted", dateUtil.toISOString(medtrumPump.primeStartTime))
+            extendedStatus.put("PrimeSeconds", it)
+            if (medtrumPump.primeConnectionLost) extendedStatus.put("PrimeConnectionLost", true)
+        }
     }
 
     @Synchronized

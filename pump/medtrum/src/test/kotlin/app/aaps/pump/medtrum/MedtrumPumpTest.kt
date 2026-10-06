@@ -7,7 +7,9 @@ import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.PumpSync
 import app.aaps.core.objects.extensions.pureProfileFromJson
 import app.aaps.core.objects.profile.ProfileSealed
+import app.aaps.pump.medtrum.code.ConnectionState
 import app.aaps.pump.medtrum.comm.enums.BasalType
+import app.aaps.pump.medtrum.comm.enums.MedtrumPumpState
 import app.aaps.pump.medtrum.comm.enums.ModelType
 import com.google.common.truth.Truth.assertThat
 import org.json.JSONObject
@@ -744,6 +746,127 @@ class MedtrumPumpTest : MedtrumTestBase() {
             newStartTime,
             TE.Type.INSULIN_CHANGE,
             null,
+            null,
+            medtrumPump.pumpType(),
+            medtrumPump.pumpSN.toString(radix = 16)
+        )
+    }
+
+    @Test fun primingWhenPrimingThenPrimedExpectPrimeSeconds() {
+        // Inputs
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        whenever(dateUtil.now()).thenReturn(1_000_000L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        whenever(dateUtil.now()).thenReturn(1_052_400L)
+
+        // Call
+        medtrumPump.pumpState = MedtrumPumpState.PRIMED
+
+        // Expected values
+        assertThat(medtrumPump.primeStartTime).isEqualTo(1_000_000L)
+        assertThat(medtrumPump.primeEndTime).isEqualTo(1_052_400L)
+        assertThat(medtrumPump.primeSeconds).isEqualTo(52L)
+        assertThat(medtrumPump.primeConnectionLost).isFalse()
+    }
+
+    @Test fun primingWhenStillPrimingExpectNoPrimeSeconds() {
+        // Inputs
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        whenever(dateUtil.now()).thenReturn(1_000_000L)
+
+        // Call
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+
+        // Expected values
+        assertThat(medtrumPump.primeStartTime).isEqualTo(1_000_000L)
+        assertThat(medtrumPump.primeSeconds).isNull()
+    }
+
+    @Test fun primingWhenRetryAfterCancelExpectFirstStartKept() {
+        // Inputs
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        whenever(dateUtil.now()).thenReturn(1_000_000L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        // Retry activation resets the state to NONE, cancel puts PRIMING back
+        whenever(dateUtil.now()).thenReturn(1_020_000L)
+        medtrumPump.pumpState = MedtrumPumpState.NONE
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        whenever(dateUtil.now()).thenReturn(1_060_000L)
+
+        // Call
+        medtrumPump.pumpState = MedtrumPumpState.PRIMED
+
+        // Expected values
+        assertThat(medtrumPump.primeStartTime).isEqualTo(1_000_000L)
+        assertThat(medtrumPump.primeSeconds).isEqualTo(60L)
+    }
+
+    @Test fun primingWhenConnectionLostExpectFlagSet() {
+        // Inputs
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        whenever(dateUtil.now()).thenReturn(1_000_000L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        medtrumPump.connectionState = ConnectionState.DISCONNECTED
+        whenever(dateUtil.now()).thenReturn(1_090_000L)
+
+        // Call
+        medtrumPump.pumpState = MedtrumPumpState.PRIMED
+        medtrumPump.connectionState = ConnectionState.DISCONNECTED
+
+        // Expected values
+        assertThat(medtrumPump.primeSeconds).isEqualTo(90L)
+        assertThat(medtrumPump.primeConnectionLost).isTrue()
+    }
+
+    @Test fun primingWhenDisconnectedAfterPrimedExpectNoFlag() {
+        // Inputs
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        medtrumPump.pumpState = MedtrumPumpState.PRIMED
+
+        // Call
+        medtrumPump.connectionState = ConnectionState.DISCONNECTED
+
+        // Expected values
+        assertThat(medtrumPump.primeConnectionLost).isFalse()
+    }
+
+    @Test fun primingWhenStoppedExpectCleared() {
+        // Inputs
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        whenever(dateUtil.now()).thenReturn(1_000_000L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        whenever(dateUtil.now()).thenReturn(1_050_000L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMED
+        medtrumPump.pumpState = MedtrumPumpState.ACTIVE
+
+        // Call
+        medtrumPump.pumpState = MedtrumPumpState.STOPPED
+
+        // Expected values
+        assertThat(medtrumPump.primeStartTime).isEqualTo(0L)
+        assertThat(medtrumPump.primeEndTime).isEqualTo(0L)
+        assertThat(medtrumPump.primeSeconds).isNull()
+    }
+
+    @Test fun handleNewPatchWhenPrimedExpectPrimeTimeInSiteChangeNote() {
+        // Inputs
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        whenever(dateUtil.now()).thenReturn(1_000_000L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        whenever(dateUtil.now()).thenReturn(1_052_400L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMED
+
+        val newStartTime = 1_100_000L
+
+        // Call
+        medtrumPump.handleNewPatch(3L, 1, newStartTime)
+
+        // Expected values
+        verify(pumpSync, times(1)).insertTherapyEventIfNewWithTimestamp(
+            newStartTime,
+            TE.Type.CANNULA_CHANGE,
+            "Priming 52 s",
             null,
             medtrumPump.pumpType(),
             medtrumPump.pumpSN.toString(radix = 16)

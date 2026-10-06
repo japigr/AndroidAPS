@@ -192,6 +192,16 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Unit tests of the Medtrum driver
+        run: |
+              ./gradlew :pump:medtrum:testFullDebugUnitTest \
+              -Dorg.gradle.jvmargs="-Xmx8g -XX:+UseParallelGC -Xss1024m" \
+              -Dkotlin.daemon.jvm.options="-Xmx2g" \
+              -Dkotlin.compiler.execution.strategy="in-process" \
+              -Dorg.gradle.daemon=true \
+              -Dorg.gradle.workers.max=8 \
+              -Dorg.gradle.caching=true
+
       - name: Build APKs
         run: |
               ./gradlew :app:assemble${{ env.BUILD_VARIANT }} :wear:assemble${{ env.BUILD_VARIANT }} \

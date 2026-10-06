@@ -29,14 +29,19 @@ Medtrum only: the pump part of every device status (`pump.extended`) also carrie
 `BatteryVoltage` (also as `pump.battery.voltage`, so Nightscout pump alerts can use it), `BatteryVoltageA`, `PatchId`,
 `PatchActivated`, `PumpState`, `PumpModel`, `FirmwareVersion`, `PumpSerial` and `ActiveAlarms`.
 
+Medtrum priming time: at a patch change the driver measures how long priming takes (from the first `PRIMING`
+to the first `PRIMED` pump state AAPS sees). It is written into the note of the Site Change event (`Priming 52 s`)
+and sent in `pump.extended` as `PrimeStarted` and `PrimeSeconds` until the patch is deactivated. If the Bluetooth
+connection dropped during priming, the end is seen late: the note says so and `PrimeConnectionLost` is `true`.
+
 Size: roughly 5–8 kB per device status (every 5 min); the hourly `settings`/`automation` part adds a few kB.
 
 Safety and scope:
 - Export only. Nothing is read back and nothing influences dosing.
-- No database change, so you can go back to an official build at any time.
+- No database change, so you can go back to an official build at any time (the Medtrum priming time only adds a note to the Site Change event).
 - The data sits inside `openaps.suggested`, which other apps (AAPSClient, xDrip+, Nightscout) already read and which ignore unknown keys.
 - Can be switched off: **Preferences → Loop → Send tuning data to Nightscout** (on by default in this fork).
-- Code: [`TuningData.kt`](plugins/aps/src/main/kotlin/app/aaps/plugins/aps/loop/TuningData.kt) plus a few lines in `LoopPlugin.kt`, `MedtrumPlugin.kt` and `PumpStatusProviderImpl.kt`.
+- Code: [`TuningData.kt`](plugins/aps/src/main/kotlin/app/aaps/plugins/aps/loop/TuningData.kt) plus a few lines in `LoopPlugin.kt`, `MedtrumPlugin.kt`, `MedtrumPump.kt` and `PumpStatusProviderImpl.kt`.
 
 ## Reading the data
 

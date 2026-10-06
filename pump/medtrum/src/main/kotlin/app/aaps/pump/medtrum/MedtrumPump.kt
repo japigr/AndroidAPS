@@ -58,6 +58,8 @@ class MedtrumPump @Inject constructor(
     var connectionState: ConnectionState
         get() = _connectionState.value
         set(value) {
+            // fork japigr/AndroidAPS: connection lost while priming, the end of priming is then seen late
+            if (value == ConnectionState.DISCONNECTED && primeStartTime != 0L && primeEndTime == 0L) primeConnectionLost = true
             _connectionState.value = value
         }
 
@@ -67,6 +69,8 @@ class MedtrumPump @Inject constructor(
     var pumpState: MedtrumPumpState
         get() = _pumpState.value
         set(value) {
+            // fork japigr/AndroidAPS: before patchPrimed changes, it tells a new priming from a retry
+            trackPrimeTime(value)
             // Maintain patchPrimed flag: set once we reach PRIMING, clear only on STOPPED
             when {
                 value >= MedtrumPumpState.PRIMING && value < MedtrumPumpState.STOPPED -> patchPrimed = true
@@ -113,6 +117,34 @@ class MedtrumPump @Inject constructor(
             _patchPrimed = value
             preferences.put(MedtrumBooleanNonKey.PatchPrimed, value)
         }
+
+    // fork japigr/AndroidAPS: priming time of the current patch, from the first PRIMING to the first PRIMED state seen by AAPS
+    private var _primeStartTime = 0L // Time in ms!
+    var primeStartTime: Long
+        get() = _primeStartTime
+        set(value) {
+            _primeStartTime = value
+            preferences.put(MedtrumLongNonKey.PrimeStartTime, value)
+        }
+
+    private var _primeEndTime = 0L // Time in ms!
+    var primeEndTime: Long
+        get() = _primeEndTime
+        set(value) {
+            _primeEndTime = value
+            preferences.put(MedtrumLongNonKey.PrimeEndTime, value)
+        }
+
+    private var _primeConnectionLost = false
+    var primeConnectionLost: Boolean
+        get() = _primeConnectionLost
+        set(value) {
+            _primeConnectionLost = value
+            preferences.put(MedtrumBooleanNonKey.PrimeConnectionLost, value)
+        }
+
+    val primeSeconds: Long?
+        get() = if (primeStartTime != 0L && primeEndTime > primeStartTime) round((primeEndTime - primeStartTime) / 1000.0).toLong() else null
 
     private var _lastBasalType: MutableStateFlow<BasalType> = MutableStateFlow(BasalType.NONE)
     val lastBasalTypeFlow: StateFlow<BasalType> = _lastBasalType
@@ -343,6 +375,9 @@ class MedtrumPump @Inject constructor(
         _bolusStartTime = preferences.get(MedtrumLongNonKey.BolusStartTime)
         _bolusAmountToBeDelivered = preferences.get(MedtrumDoubleNonKey.BolusAmountToBeDelivered)
         _patchPrimed = preferences.get(MedtrumBooleanNonKey.PatchPrimed)
+        _primeStartTime = preferences.get(MedtrumLongNonKey.PrimeStartTime)
+        _primeEndTime = preferences.get(MedtrumLongNonKey.PrimeEndTime)
+        _primeConnectionLost = preferences.get(MedtrumBooleanNonKey.PrimeConnectionLost)
 
         loadActiveAlarms()
 
@@ -622,6 +657,7 @@ class MedtrumPump @Inject constructor(
         pumpSync.insertTherapyEventIfNewWithTimestamp(
             timestamp = newStartTime,
             type = TE.Type.CANNULA_CHANGE,
+            note = primeNote(),
             pumpType = pumpType(),
             pumpSerial = pumpSN.toString(radix = 16)
         )
@@ -632,6 +668,32 @@ class MedtrumPump @Inject constructor(
             pumpSerial = pumpSN.toString(radix = 16)
         )
     }
+
+    // fork japigr/AndroidAPS: measure priming, a retry after cancel (patchPrimed already set) keeps the first start
+    private fun trackPrimeTime(newState: MedtrumPumpState) {
+        when {
+            newState == MedtrumPumpState.PRIMING && pumpState != MedtrumPumpState.PRIMING && !patchPrimed -> {
+                primeStartTime = dateUtil.now()
+                primeEndTime = 0L
+                primeConnectionLost = false
+            }
+
+            newState == MedtrumPumpState.PRIMED && primeStartTime != 0L && primeEndTime == 0L             -> {
+                primeEndTime = dateUtil.now()
+                aapsLogger.info(LTag.PUMP, "Priming took $primeSeconds s, connection lost: $primeConnectionLost")
+            }
+
+            newState == MedtrumPumpState.STOPPED                                                          -> {
+                primeStartTime = 0L
+                primeEndTime = 0L
+                primeConnectionLost = false
+            }
+        }
+    }
+
+    // fork japigr/AndroidAPS: note of the site change in Nightscout
+    private fun primeNote(): String? =
+        primeSeconds?.let { "Priming $it s" + if (primeConnectionLost) " (connection lost while priming, real time may be shorter)" else "" }
 
     private fun saveActiveAlarms() {
         val alarmsStr = activeAlarms.joinToString(separator = ",") { it.name }

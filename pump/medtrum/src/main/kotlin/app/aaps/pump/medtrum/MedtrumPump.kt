@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.util.EnumSet
 import java.util.GregorianCalendar
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.round
@@ -143,8 +144,32 @@ class MedtrumPump @Inject constructor(
             preferences.put(MedtrumBooleanNonKey.PrimeConnectionLost, value)
         }
 
+    // fork japigr/AndroidAPS: reservoir before priming (highest value seen until PRIMED) and the first value seen after PRIMED
+    private var _primeReservoirStart = 0.0
+    var primeReservoirStart: Double
+        get() = _primeReservoirStart
+        set(value) {
+            _primeReservoirStart = value
+            preferences.put(MedtrumDoubleNonKey.PrimeReservoirStart, value)
+        }
+
+    private var _primeReservoirEnd = 0.0
+    var primeReservoirEnd: Double
+        get() = _primeReservoirEnd
+        set(value) {
+            _primeReservoirEnd = value
+            preferences.put(MedtrumDoubleNonKey.PrimeReservoirEnd, value)
+        }
+
     val primeSeconds: Long?
         get() = if (primeStartTime != 0L && primeEndTime > primeStartTime) round((primeEndTime - primeStartTime) / 1000.0).toLong() else null
+
+    // fork japigr/AndroidAPS: insulin used by priming, the pump reports the reservoir in steps of 0.05 U
+    val primeUnits: Double?
+        get() = if (primeSeconds != null && primeReservoirEnd > 0.0 && primeReservoirStart > primeReservoirEnd) round((primeReservoirStart - primeReservoirEnd) / 0.05) * 0.05 else null
+
+    val primeUnitsPerMinute: Double?
+        get() = primeUnits?.let { it / ((primeEndTime - primeStartTime) / 60000.0) }
 
     private var _lastBasalType: MutableStateFlow<BasalType> = MutableStateFlow(BasalType.NONE)
     val lastBasalTypeFlow: StateFlow<BasalType> = _lastBasalType
@@ -161,6 +186,7 @@ class MedtrumPump @Inject constructor(
     var reservoir: Double
         get() = _reservoir.value
         set(value) {
+            trackPrimeReservoir(value)
             _reservoir.value = value
         }
 
@@ -378,6 +404,8 @@ class MedtrumPump @Inject constructor(
         _primeStartTime = preferences.get(MedtrumLongNonKey.PrimeStartTime)
         _primeEndTime = preferences.get(MedtrumLongNonKey.PrimeEndTime)
         _primeConnectionLost = preferences.get(MedtrumBooleanNonKey.PrimeConnectionLost)
+        _primeReservoirStart = preferences.get(MedtrumDoubleNonKey.PrimeReservoirStart)
+        _primeReservoirEnd = preferences.get(MedtrumDoubleNonKey.PrimeReservoirEnd)
 
         loadActiveAlarms()
 
@@ -653,6 +681,8 @@ class MedtrumPump @Inject constructor(
         patchStartTime = newStartTime
         currentSequenceNumber = sequenceNumber // We are activated, set the new seq nr
         syncedSequenceNumber = 1 // Always start with 1
+        // fork japigr/AndroidAPS: no reservoir seen since PRIMED, the last value seen while priming is the best end for the note
+        if (primeEndTime != 0L && primeReservoirEnd == 0.0 && reservoir > 0.0 && reservoir < primeReservoirStart) primeReservoirEnd = reservoir
         // Sync cannula change
         pumpSync.insertTherapyEventIfNewWithTimestamp(
             timestamp = newStartTime,
@@ -676,6 +706,8 @@ class MedtrumPump @Inject constructor(
                 primeStartTime = dateUtil.now()
                 primeEndTime = 0L
                 primeConnectionLost = false
+                primeReservoirStart = reservoir
+                primeReservoirEnd = 0.0
             }
 
             newState == MedtrumPumpState.PRIMED && primeStartTime != 0L && primeEndTime == 0L             -> {
@@ -687,13 +719,31 @@ class MedtrumPump @Inject constructor(
                 primeStartTime = 0L
                 primeEndTime = 0L
                 primeConnectionLost = false
+                primeReservoirStart = 0.0
+                primeReservoirEnd = 0.0
+            }
+        }
+    }
+
+    // fork japigr/AndroidAPS: the reservoir comes in the same notification after the state, so the end is the first value after PRIMED
+    private fun trackPrimeReservoir(newReservoir: Double) {
+        if (primeStartTime == 0L || newReservoir <= 0.0) return
+        when {
+            primeEndTime == 0L       -> if (newReservoir > primeReservoirStart) primeReservoirStart = newReservoir
+            primeReservoirEnd == 0.0 -> {
+                primeReservoirEnd = newReservoir
+                aapsLogger.info(LTag.PUMP, "Priming used $primeUnits U ($primeReservoirStart -> $primeReservoirEnd), $primeUnitsPerMinute U/min")
             }
         }
     }
 
     // fork japigr/AndroidAPS: note of the site change in Nightscout
     private fun primeNote(): String? =
-        primeSeconds?.let { "Priming $it s" + if (primeConnectionLost) " (connection lost while priming, real time may be shorter)" else "" }
+        primeSeconds?.let { seconds ->
+            "Priming $seconds s" +
+                (primeUnits?.let { String.format(Locale.US, ", %.2f U, %.2f U/min", it, primeUnitsPerMinute) } ?: "") +
+                if (primeConnectionLost) " (connection lost while priming, real time may be shorter and speed higher)" else ""
+        }
 
     private fun saveActiveAlarms() {
         val alarmsStr = activeAlarms.joinToString(separator = ",") { it.name }

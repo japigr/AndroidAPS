@@ -847,6 +847,83 @@ class MedtrumPumpTest : MedtrumTestBase() {
         assertThat(medtrumPump.primeStartTime).isEqualTo(0L)
         assertThat(medtrumPump.primeEndTime).isEqualTo(0L)
         assertThat(medtrumPump.primeSeconds).isNull()
+        assertThat(medtrumPump.primeReservoirStart).isEqualTo(0.0)
+        assertThat(medtrumPump.primeReservoirEnd).isEqualTo(0.0)
+        assertThat(medtrumPump.primeUnits).isNull()
+    }
+
+    @Test fun primingWhenReservoirDropsExpectUnitsAndSpeed() {
+        // Inputs
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        medtrumPump.reservoir = 193.40
+        whenever(dateUtil.now()).thenReturn(1_000_000L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        medtrumPump.reservoir = 192.10
+        whenever(dateUtil.now()).thenReturn(1_052_400L)
+
+        // Call, the reservoir comes in the same notification after the state
+        medtrumPump.pumpState = MedtrumPumpState.PRIMED
+        medtrumPump.reservoir = 189.80
+        medtrumPump.reservoir = 189.75
+
+        // Expected values
+        assertThat(medtrumPump.primeReservoirStart).isWithin(0.001).of(193.40)
+        assertThat(medtrumPump.primeReservoirEnd).isWithin(0.001).of(189.80)
+        assertThat(medtrumPump.primeUnits!!).isWithin(0.001).of(3.60)
+        assertThat(medtrumPump.primeUnitsPerMinute!!).isWithin(0.001).of(3.60 / (52.4 / 60.0))
+    }
+
+    @Test fun primingWhenReservoirUnknownBeforePrimingExpectHighestValueWhilePriming() {
+        // Inputs, reservoir was reset with the old patch
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        whenever(dateUtil.now()).thenReturn(1_000_000L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        medtrumPump.reservoir = 192.00
+        medtrumPump.reservoir = 191.00
+        whenever(dateUtil.now()).thenReturn(1_060_000L)
+
+        // Call
+        medtrumPump.pumpState = MedtrumPumpState.PRIMED
+        medtrumPump.reservoir = 189.00
+
+        // Expected values
+        assertThat(medtrumPump.primeReservoirStart).isWithin(0.001).of(192.00)
+        assertThat(medtrumPump.primeUnits!!).isWithin(0.001).of(3.00)
+        assertThat(medtrumPump.primeUnitsPerMinute!!).isWithin(0.001).of(3.00)
+    }
+
+    @Test fun primingWhenReservoirNotChangedExpectNoUnits() {
+        // Inputs
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        medtrumPump.reservoir = 193.40
+        whenever(dateUtil.now()).thenReturn(1_000_000L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        whenever(dateUtil.now()).thenReturn(1_052_400L)
+
+        // Call
+        medtrumPump.pumpState = MedtrumPumpState.PRIMED
+        medtrumPump.reservoir = 193.40
+
+        // Expected values
+        assertThat(medtrumPump.primeSeconds).isEqualTo(52L)
+        assertThat(medtrumPump.primeUnits).isNull()
+        assertThat(medtrumPump.primeUnitsPerMinute).isNull()
+    }
+
+    @Test fun primingWhenReservoirBeforePrimingOnlyExpectNoUnits() {
+        // Inputs
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        medtrumPump.reservoir = 193.40
+        whenever(dateUtil.now()).thenReturn(1_000_000L)
+
+        // Call
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        medtrumPump.reservoir = 192.10
+
+        // Expected values
+        assertThat(medtrumPump.primeReservoirStart).isWithin(0.001).of(193.40)
+        assertThat(medtrumPump.primeReservoirEnd).isEqualTo(0.0)
+        assertThat(medtrumPump.primeUnits).isNull()
     }
 
     @Test fun handleNewPatchWhenPrimedExpectPrimeTimeInSiteChangeNote() {
@@ -871,5 +948,50 @@ class MedtrumPumpTest : MedtrumTestBase() {
             medtrumPump.pumpType(),
             medtrumPump.pumpSN.toString(radix = 16)
         )
+    }
+
+    @Test fun handleNewPatchWhenReservoirKnownExpectSpeedInSiteChangeNote() {
+        // Inputs
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        medtrumPump.reservoir = 193.40
+        whenever(dateUtil.now()).thenReturn(1_000_000L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        whenever(dateUtil.now()).thenReturn(1_052_400L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMED
+        medtrumPump.reservoir = 189.80
+
+        val newStartTime = 1_100_000L
+
+        // Call
+        medtrumPump.handleNewPatch(3L, 1, newStartTime)
+
+        // Expected values
+        verify(pumpSync, times(1)).insertTherapyEventIfNewWithTimestamp(
+            newStartTime,
+            TE.Type.CANNULA_CHANGE,
+            "Priming 52 s, 3.60 U, 4.12 U/min",
+            null,
+            medtrumPump.pumpType(),
+            medtrumPump.pumpSN.toString(radix = 16)
+        )
+    }
+
+    @Test fun handleNewPatchWhenNoReservoirAfterPrimedExpectLastValueWhilePriming() {
+        // Inputs
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        medtrumPump.reservoir = 193.40
+        whenever(dateUtil.now()).thenReturn(1_000_000L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        medtrumPump.reservoir = 190.40
+        whenever(dateUtil.now()).thenReturn(1_060_000L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMED
+
+        // Call
+        medtrumPump.handleNewPatch(3L, 1, 1_100_000L)
+
+        // Expected values
+        assertThat(medtrumPump.primeReservoirEnd).isWithin(0.001).of(190.40)
+        assertThat(medtrumPump.primeUnits!!).isWithin(0.001).of(3.00)
+        assertThat(medtrumPump.primeUnitsPerMinute!!).isWithin(0.001).of(3.00)
     }
 }

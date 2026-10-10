@@ -334,6 +334,8 @@ class MedtrumPlugin @Inject constructor(
         medtrumPump.primeSeconds?.let {
             extendedStatus.put("PrimeStarted", dateUtil.toISOString(medtrumPump.primeStartTime))
             extendedStatus.put("PrimeSeconds", it)
+            medtrumPump.primeUnits?.let { units -> extendedStatus.put("PrimeUnits", Round.roundTo(units, 0.01)) }
+            medtrumPump.primeUnitsPerMinute?.let { speed -> extendedStatus.put("PrimeUnitsPerMinute", Round.roundTo(speed, 0.01)) }
             if (medtrumPump.primeConnectionLost) extendedStatus.put("PrimeConnectionLost", true)
         }
     }

@@ -10,4 +10,6 @@ enum class MedtrumDoubleNonKey(
 
     LastBolusAmount("last_bolus_amount", 0.0),
     BolusAmountToBeDelivered("bolus_amount_to_be_delivered", 0.0),
+    PrimeReservoirStart("prime_reservoir_start", 0.0),
+    PrimeReservoirEnd("prime_reservoir_end", 0.0),
 }

@@ -29,10 +29,14 @@ Medtrum only: the pump part of every device status (`pump.extended`) also carrie
 `BatteryVoltage` (also as `pump.battery.voltage`, so Nightscout pump alerts can use it), `BatteryVoltageA`, `PatchId`,
 `PatchActivated`, `PumpState`, `PumpModel`, `FirmwareVersion`, `PumpSerial` and `ActiveAlarms`.
 
-Medtrum priming time: at a patch change the driver measures how long priming takes (from the first `PRIMING`
-to the first `PRIMED` pump state AAPS sees). It is written into the note of the Site Change event (`Priming 52 s`)
-and sent in `pump.extended` as `PrimeStarted` and `PrimeSeconds` until the patch is deactivated. If the Bluetooth
-connection dropped during priming, the end is seen late: the note says so and `PrimeConnectionLost` is `true`.
+Medtrum priming time and speed: at a patch change the driver measures how long priming takes (from the first `PRIMING`
+to the first `PRIMED` pump state AAPS sees) and how much insulin it uses (the reservoir reported by the pump before
+priming minus the first value after it, in steps of 0.05 U). Different fills can need a different amount of insulin,
+so the speed is also given in units per minute. It is written into the note of the Site Change event
+(`Priming 52 s, 3.60 U, 4.12 U/min`) and sent in `pump.extended` as `PrimeStarted`, `PrimeSeconds`, `PrimeUnits`
+and `PrimeUnitsPerMinute` until the patch is deactivated. If the pump did not report the reservoir around priming,
+only the seconds are given. If the Bluetooth connection dropped during priming, the end is seen late: the note says so
+and `PrimeConnectionLost` is `true`.
 
 Size: roughly 5–8 kB per device status (every 5 min); the hourly `settings`/`automation` part adds a few kB.
 

@@ -138,4 +138,5 @@
     <string name="bolus_error_reason_unable_to_send_command">Nie można wysłać polecenia bolusa</string>
     <string name="bolus_error_reason_communication_lost">Przekroczono limit czasu na informację o statusie bolusa</string>
     <string name="bolus_error_reason_pump_error">Błąd pompy</string>
+    <string name="prime_live">Czas: %1$s, prędkość: %2$s kroków/min</string>
 </resources>

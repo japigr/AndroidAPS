@@ -37,7 +37,8 @@ so the speed is also given in units per minute. It is written into the note of t
 (`Priming 52 s, 3.60 U, 4.12 U/min`) and sent in `pump.extended` as `PrimeStarted`, `PrimeSeconds`, `PrimeUnits`
 and `PrimeUnitsPerMinute` until the patch is deactivated. If the pump did not report the reservoir around priming,
 only the seconds are given. If the Bluetooth connection dropped during priming, the end is seen late: the note says so
-and `PrimeConnectionLost` is `true`.
+and `PrimeConnectionLost` is `true`. While priming, the priming screen also shows the time since the start and the current speed in pump steps per
+minute (the pump reports only its progress counter while priming, not the reservoir). This live view is not sent anywhere.
 
 Size: roughly 5–8 kB per device status (every 5 min); the hourly `settings`/`automation` part adds a few kB.
 

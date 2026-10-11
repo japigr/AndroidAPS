@@ -51,6 +51,11 @@ class MedtrumPump @Inject constructor(
     companion object {
 
         const val FAKE_TBR_LENGTH = 4800L
+
+        // fork japigr/AndroidAPS: live priming speed, window of progress samples, shortest span for a speed and time without progress shown as 0
+        const val PRIME_SPEED_WINDOW_MS = 15_000L
+        const val PRIME_SPEED_MIN_SPAN_MS = 3_000L
+        const val PRIME_STALL_MS = 10_000L
     }
 
     // Connection state flow
@@ -105,6 +110,7 @@ class MedtrumPump @Inject constructor(
     var primeProgress: Int
         get() = _primeProgress.value
         set(value) {
+            trackPrimeProgress(value)
             _primeProgress.value = value
         }
 
@@ -171,6 +177,23 @@ class MedtrumPump @Inject constructor(
 
     val primeUnitsPerMinute: Double?
         get() = primeUnits?.let { it / ((primeEndTime - primeStartTime) / 60000.0) }
+
+    // fork japigr/AndroidAPS: prime progress of the current priming as (time, progress), only for the live speed on the priming screen
+    private val primeProgressSamples = ArrayDeque<Pair<Long, Int>>()
+
+    // fork japigr/AndroidAPS: current priming speed in pump steps per minute over the last 15 s, the pump does not report the reservoir while priming
+    val primeStepsPerMinute: Double?
+        get() {
+            if (primeStartTime == 0L || primeEndTime != 0L) return null
+            synchronized(primeProgressSamples) {
+                if (primeProgressSamples.size < 2) return null
+                val (firstTime, firstProgress) = primeProgressSamples.first()
+                val (lastTime, lastProgress) = primeProgressSamples.last()
+                if (dateUtil.now() - lastTime > PRIME_STALL_MS) return 0.0
+                if (lastTime - firstTime < PRIME_SPEED_MIN_SPAN_MS) return null
+                return (lastProgress - firstProgress) * 60000.0 / (lastTime - firstTime)
+            }
+        }
 
     private var _lastBasalType: MutableStateFlow<BasalType> = MutableStateFlow(BasalType.NONE)
     val lastBasalTypeFlow: StateFlow<BasalType> = _lastBasalType
@@ -709,6 +732,7 @@ class MedtrumPump @Inject constructor(
                 primeConnectionLost = false
                 primeReservoirStart = reservoir
                 primeReservoirEnd = 0.0
+                synchronized(primeProgressSamples) { primeProgressSamples.clear() }
             }
 
             (newState == MedtrumPumpState.PRIMED || newState == MedtrumPumpState.EJECTED) && primeStartTime != 0L && primeEndTime == 0L -> {
@@ -722,7 +746,19 @@ class MedtrumPump @Inject constructor(
                 primeConnectionLost = false
                 primeReservoirStart = 0.0
                 primeReservoirEnd = 0.0
+                synchronized(primeProgressSamples) { primeProgressSamples.clear() }
             }
+        }
+    }
+
+    // fork japigr/AndroidAPS: the progress counter restarts from 0 when priming ends, older samples than the window are dropped
+    private fun trackPrimeProgress(newProgress: Int) {
+        if (primeStartTime == 0L || primeEndTime != 0L) return
+        synchronized(primeProgressSamples) {
+            if (primeProgressSamples.isNotEmpty() && newProgress < primeProgressSamples.last().second) primeProgressSamples.clear()
+            val now = dateUtil.now()
+            primeProgressSamples.addLast(now to newProgress)
+            while (primeProgressSamples.size > 2 && primeProgressSamples.first().first < now - PRIME_SPEED_WINDOW_MS) primeProgressSamples.removeFirst()
         }
     }
 

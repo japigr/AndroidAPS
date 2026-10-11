@@ -149,4 +149,5 @@
     <string name="bolus_error_reason_unable_to_send_command">Unable to send bolus command</string>
     <string name="bolus_error_reason_communication_lost">Timeout getting bolus status</string>
     <string name="bolus_error_reason_pump_error">Pump error</string>
+    <string name="prime_live">Time: %1$s, speed: %2$s steps/min</string>
 </resources>

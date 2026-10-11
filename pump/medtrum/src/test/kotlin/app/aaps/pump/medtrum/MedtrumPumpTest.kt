@@ -1052,4 +1052,75 @@ class MedtrumPumpTest : MedtrumTestBase() {
             medtrumPump.pumpSN.toString(radix = 16)
         )
     }
+
+    @Test fun primeStepsPerMinuteWhenPrimingExpectSpeedFromProgress() {
+        // Inputs
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        whenever(dateUtil.now()).thenReturn(1_000_000L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        whenever(dateUtil.now()).thenReturn(1_001_000L)
+        medtrumPump.primeProgress = 1
+        whenever(dateUtil.now()).thenReturn(1_013_000L)
+
+        // Call
+        medtrumPump.primeProgress = 11
+
+        // Expected values
+        assertThat(medtrumPump.primeStepsPerMinute!!).isWithin(0.001).of(50.0)
+    }
+
+    @Test fun primeStepsPerMinuteWhenOldSamplesExpectOnlyLast15Seconds() {
+        // Inputs
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        whenever(dateUtil.now()).thenReturn(1_000_000L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        whenever(dateUtil.now()).thenReturn(1_001_000L)
+        medtrumPump.primeProgress = 1
+        whenever(dateUtil.now()).thenReturn(1_010_000L)
+        medtrumPump.primeProgress = 8
+        whenever(dateUtil.now()).thenReturn(1_020_000L)
+        medtrumPump.primeProgress = 16
+        whenever(dateUtil.now()).thenReturn(1_030_000L)
+
+        // Call
+        medtrumPump.primeProgress = 24
+
+        // Expected values
+        assertThat(medtrumPump.primeStepsPerMinute!!).isWithin(0.001).of(48.0)
+    }
+
+    @Test fun primeStepsPerMinuteWhenNoProgressFor10SecondsExpectZero() {
+        // Inputs
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        whenever(dateUtil.now()).thenReturn(1_000_000L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        whenever(dateUtil.now()).thenReturn(1_001_000L)
+        medtrumPump.primeProgress = 1
+        whenever(dateUtil.now()).thenReturn(1_013_000L)
+        medtrumPump.primeProgress = 11
+
+        // Call
+        whenever(dateUtil.now()).thenReturn(1_024_000L)
+
+        // Expected values
+        assertThat(medtrumPump.primeStepsPerMinute!!).isWithin(0.001).of(0.0)
+    }
+
+    @Test fun primeStepsPerMinuteWhenPrimingEndedExpectNull() {
+        // Inputs
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        whenever(dateUtil.now()).thenReturn(1_000_000L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        whenever(dateUtil.now()).thenReturn(1_001_000L)
+        medtrumPump.primeProgress = 1
+        whenever(dateUtil.now()).thenReturn(1_013_000L)
+        medtrumPump.primeProgress = 11
+
+        // Call
+        medtrumPump.pumpState = MedtrumPumpState.EJECTED
+        medtrumPump.primeProgress = 0
+
+        // Expected values
+        assertThat(medtrumPump.primeStepsPerMinute).isNull()
+    }
 }

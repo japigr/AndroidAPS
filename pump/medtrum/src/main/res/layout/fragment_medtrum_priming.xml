@@ -51,6 +51,18 @@
                 tools:layout_editor_absoluteX="0dp"
                 tools:progress="0" />
 
+            <!-- fork japigr/AndroidAPS: time since the start of priming and the current speed -->
+            <TextView
+                android:id="@+id/prime_live"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center"
+                android:textSize="16sp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/priming_progress" />
+
             <TextView
                 android:id="@+id/do_not_attach"
                 android:layout_width="0dp"

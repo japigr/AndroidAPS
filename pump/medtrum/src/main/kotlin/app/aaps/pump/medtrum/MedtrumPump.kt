@@ -119,7 +119,8 @@ class MedtrumPump @Inject constructor(
             preferences.put(MedtrumBooleanNonKey.PatchPrimed, value)
         }
 
-    // fork japigr/AndroidAPS: priming time of the current patch, from the first PRIMING to the first PRIMED state seen by AAPS
+    // fork japigr/AndroidAPS: priming time of the current patch, from the first PRIMING to the first PRIMED or EJECTED state seen by AAPS
+    // (the pump can go from PRIMING straight to EJECTED, then AAPS never sees PRIMED)
     private var _primeStartTime = 0L // Time in ms!
     var primeStartTime: Long
         get() = _primeStartTime
@@ -144,7 +145,7 @@ class MedtrumPump @Inject constructor(
             preferences.put(MedtrumBooleanNonKey.PrimeConnectionLost, value)
         }
 
-    // fork japigr/AndroidAPS: reservoir before priming (highest value seen until PRIMED) and the first value seen after PRIMED
+    // fork japigr/AndroidAPS: reservoir before priming (highest value seen until the end of priming) and the first value seen after it
     private var _primeReservoirStart = 0.0
     var primeReservoirStart: Double
         get() = _primeReservoirStart
@@ -681,7 +682,7 @@ class MedtrumPump @Inject constructor(
         patchStartTime = newStartTime
         currentSequenceNumber = sequenceNumber // We are activated, set the new seq nr
         syncedSequenceNumber = 1 // Always start with 1
-        // fork japigr/AndroidAPS: no reservoir seen since PRIMED, the last value seen while priming is the best end for the note
+        // fork japigr/AndroidAPS: no reservoir seen since the end of priming, the last value seen while priming is the best end for the note
         if (primeEndTime != 0L && primeReservoirEnd == 0.0 && reservoir > 0.0 && reservoir < primeReservoirStart) primeReservoirEnd = reservoir
         // Sync cannula change
         pumpSync.insertTherapyEventIfNewWithTimestamp(
@@ -702,7 +703,7 @@ class MedtrumPump @Inject constructor(
     // fork japigr/AndroidAPS: measure priming, a retry after cancel (patchPrimed already set) keeps the first start
     private fun trackPrimeTime(newState: MedtrumPumpState) {
         when {
-            newState == MedtrumPumpState.PRIMING && pumpState != MedtrumPumpState.PRIMING && !patchPrimed -> {
+            newState == MedtrumPumpState.PRIMING && pumpState != MedtrumPumpState.PRIMING && !patchPrimed                               -> {
                 primeStartTime = dateUtil.now()
                 primeEndTime = 0L
                 primeConnectionLost = false
@@ -710,12 +711,12 @@ class MedtrumPump @Inject constructor(
                 primeReservoirEnd = 0.0
             }
 
-            newState == MedtrumPumpState.PRIMED && primeStartTime != 0L && primeEndTime == 0L             -> {
+            (newState == MedtrumPumpState.PRIMED || newState == MedtrumPumpState.EJECTED) && primeStartTime != 0L && primeEndTime == 0L -> {
                 primeEndTime = dateUtil.now()
                 aapsLogger.info(LTag.PUMP, "Priming took $primeSeconds s, connection lost: $primeConnectionLost")
             }
 
-            newState == MedtrumPumpState.STOPPED                                                          -> {
+            newState == MedtrumPumpState.STOPPED                                                                                        -> {
                 primeStartTime = 0L
                 primeEndTime = 0L
                 primeConnectionLost = false
@@ -725,7 +726,7 @@ class MedtrumPump @Inject constructor(
         }
     }
 
-    // fork japigr/AndroidAPS: the reservoir comes in the same notification after the state, so the end is the first value after PRIMED
+    // fork japigr/AndroidAPS: the reservoir comes in the same notification after the state, so the end is the first value after the end of priming
     private fun trackPrimeReservoir(newReservoir: Double) {
         if (primeStartTime == 0L || newReservoir <= 0.0) return
         when {

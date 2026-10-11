@@ -30,8 +30,9 @@ Medtrum only: the pump part of every device status (`pump.extended`) also carrie
 `PatchActivated`, `PumpState`, `PumpModel`, `FirmwareVersion`, `PumpSerial` and `ActiveAlarms`.
 
 Medtrum priming time and speed: at a patch change the driver measures how long priming takes (from the first `PRIMING`
-to the first `PRIMED` pump state AAPS sees) and how much insulin it uses (the reservoir reported by the pump before
-priming minus the first value after it, in steps of 0.05 U). Different fills can need a different amount of insulin,
+to the first `PRIMED` or `EJECTED` pump state AAPS sees, as the pump can go from `PRIMING` straight to `EJECTED`) and
+how much insulin it uses (the reservoir reported by the pump before priming minus the first value after it, in steps
+of 0.05 U). Different fills can need a different amount of insulin,
 so the speed is also given in units per minute. It is written into the note of the Site Change event
 (`Priming 52 s, 3.60 U, 4.12 U/min`) and sent in `pump.extended` as `PrimeStarted`, `PrimeSeconds`, `PrimeUnits`
 and `PrimeUnitsPerMinute` until the patch is deactivated. If the pump did not report the reservoir around priming,

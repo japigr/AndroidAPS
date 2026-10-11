@@ -769,6 +769,38 @@ class MedtrumPumpTest : MedtrumTestBase() {
         assertThat(medtrumPump.primeConnectionLost).isFalse()
     }
 
+    @Test fun primingWhenPrimingThenEjectedExpectPrimeSeconds() {
+        // Inputs, the pump skips PRIMED
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        whenever(dateUtil.now()).thenReturn(1_000_000L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        whenever(dateUtil.now()).thenReturn(1_192_000L)
+
+        // Call
+        medtrumPump.pumpState = MedtrumPumpState.EJECTED
+
+        // Expected values
+        assertThat(medtrumPump.primeEndTime).isEqualTo(1_192_000L)
+        assertThat(medtrumPump.primeSeconds).isEqualTo(192L)
+    }
+
+    @Test fun primingWhenPrimedThenEjectedExpectEndAtPrimed() {
+        // Inputs
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        whenever(dateUtil.now()).thenReturn(1_000_000L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        whenever(dateUtil.now()).thenReturn(1_052_400L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMED
+        whenever(dateUtil.now()).thenReturn(1_200_000L)
+
+        // Call
+        medtrumPump.pumpState = MedtrumPumpState.EJECTED
+
+        // Expected values
+        assertThat(medtrumPump.primeEndTime).isEqualTo(1_052_400L)
+        assertThat(medtrumPump.primeSeconds).isEqualTo(52L)
+    }
+
     @Test fun primingWhenStillPrimingExpectNoPrimeSeconds() {
         // Inputs
         medtrumPump.pumpState = MedtrumPumpState.FILLED
@@ -993,5 +1025,31 @@ class MedtrumPumpTest : MedtrumTestBase() {
         assertThat(medtrumPump.primeReservoirEnd).isWithin(0.001).of(190.40)
         assertThat(medtrumPump.primeUnits!!).isWithin(0.001).of(3.00)
         assertThat(medtrumPump.primeUnitsPerMinute!!).isWithin(0.001).of(3.00)
+    }
+
+    @Test fun handleNewPatchWhenPrimingThenEjectedExpectSpeedInSiteChangeNote() {
+        // Inputs, values from a real patch change where the pump skipped PRIMED
+        medtrumPump.pumpState = MedtrumPumpState.FILLED
+        medtrumPump.reservoir = 198.65
+        whenever(dateUtil.now()).thenReturn(1_000_000L)
+        medtrumPump.pumpState = MedtrumPumpState.PRIMING
+        whenever(dateUtil.now()).thenReturn(1_191_972L)
+        medtrumPump.pumpState = MedtrumPumpState.EJECTED
+        medtrumPump.reservoir = 196.70
+
+        val newStartTime = 1_350_000L
+
+        // Call
+        medtrumPump.handleNewPatch(3L, 1, newStartTime)
+
+        // Expected values
+        verify(pumpSync, times(1)).insertTherapyEventIfNewWithTimestamp(
+            newStartTime,
+            TE.Type.CANNULA_CHANGE,
+            "Priming 192 s, 1.95 U, 0.61 U/min",
+            null,
+            medtrumPump.pumpType(),
+            medtrumPump.pumpSN.toString(radix = 16)
+        )
     }
 }
